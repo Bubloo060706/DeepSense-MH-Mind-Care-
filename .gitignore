@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.env
+venv/
+.env
+*.sqlite3
+*.db
+
+# Node
+node_modules/
+dist/
+build/
+.expo/
+*.log
+
+# ML
+*.pkl
+*.joblib
+*.h5
+*.tflite
+backend/ml_training/data/raw/
+backend/ml_training/data/processed/
+
+# Misc
+.DS_Store
+.idea/
+.vscode/
+*.zip
