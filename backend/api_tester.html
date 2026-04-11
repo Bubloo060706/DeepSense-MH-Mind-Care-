@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MindCare Backend - API Tester</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        
+        .header p {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+        
+        .status-bar {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 15px;
+            background: #f5f5f5;
+            border-radius: 5px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ccc;
+        }
+        
+        .status-indicator.online {
+            background: #22c55e;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .main {
+            display: grid;
+            grid-template-columns: 1fr 1.2fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        @media (max-width: 1200px) {
+            .main {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .panel {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        
+        .panel-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+        }
+        
+        .panel-body {
+            padding: 20px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        
+        .section {
+            margin-bottom: 20px;
+        }
+        
+        .section:last-child {
+            margin-bottom: 0;
+        }
+        
+        .section-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 12px;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .form-group {
+            margin-bottom: 12px;
+        }
+        
+        label {
+            display: block;
+            font-size: 12px;
+            font-weight: 500;
+            color: #555;
+            margin-bottom: 5px;
+        }
+        
+        input[type="text"],
+        input[type="number"],
+        input[type="email"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 9px 11px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 12px;
+            font-family: inherit;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 8px;
+        }
+        
+        button {
+            padding: 9px 14px;
+            border: none;
+            border-radius: 5px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            flex: 1;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+            flex: 1;
+        }
+        
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+        
+        .btn-full {
+            width: 100%;
+            margin-bottom: 15px;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            padding: 11px 16px;
+            font-size: 13px;
+        }
+        
+        .btn-full:hover {
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+        }
+        
+        .response-panel {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .response-panel-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            font-weight: 600;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .response-content {
+            padding: 15px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        
+        .response-item {
+            margin-bottom: 12px;
+            border-left: 4px solid #667eea;
+            padding: 12px;
+            background: #f9fafb;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        
+        .response-item.success {
+            border-left-color: #22c55e;
+            background: #f0fdf4;
+        }
+        
+        .response-item.error {
+            border-left-color: #ef4444;
+            background: #fef2f2;
+        }
+        
+        .response-item.info {
+            border-left-color: #3b82f6;
+            background: #eff6ff;
+        }
+        
+        .response-title {
+            font-weight: 600;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .response-status {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        
+        .response-status.success {
+            background: #dcfce7;
+            color: #166534;
+        }
+        
+        .response-status.error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        
+        .response-status.info {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+        
+        .response-time {
+            margin-left: auto;
+            font-size: 11px;
+            color: #999;
+        }
+        
+        .response-data {
+            background: white;
+            padding: 10px;
+            border-radius: 3px;
+            border: 1px solid #e5e7eb;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            overflow-x: auto;
+            max-height: 250px;
+            overflow-y: auto;
+            color: #374151;
+            line-height: 1.4;
+        }
+        
+        .test-summary {
+            background: #f0fdf4;
+            border: 1px solid #dcfce7;
+            color: #166534;
+            padding: 12px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            font-weight: 500;
+            display: none;
+        }
+        
+        .test-summary.failed {
+            background: #fef2f2;
+            border-color: #fee2e2;
+            color: #991b1b;
+        }
+        
+        .empty-state {
+            text-align: center;
+            color: #999;
+            padding: 40px 20px;
+            font-size: 13px;
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid #f3f3f3;
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 6px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🧠 MindCare Backend - API Tester</h1>
+            <p>Interactive tool to test all backend APIs with real-time responses</p>
+            <div class="status-bar">
+                <div class="status-item">
+                    <div class="status-indicator" id="health-indicator"></div>
+                    <span id="health-status">Checking...</span>
+                </div>
+                <div class="status-item">
+                    <span>📊 <span id="api-count">12</span> Endpoints</span>
+                </div>
+                <div class="status-item">
+                    <span>✓ <span id="test-count">0</span> Tests Passed</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main">
+            <!-- Left Sidebar - Controls -->
+            <div class="panel">
+                <div class="panel-header">⚙️ Configuration & Tests</div>
+                <div class="panel-body">
+                    <!-- Test All Button -->
+                    <button class="btn-full" onclick="runAllTests()" id="testAllBtn">
+                        ▶ Run All Tests
+                    </button>
+
+                    <!-- User Setup -->
+                    <div class="section">
+                        <div class="section-title">👤 Create User</div>
+                        <div class="form-group">
+                            <label>Name</label>
+                            <input type="text" id="userName" value="Test User" placeholder="User name">
+                        </div>
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" id="userEmail" placeholder="user@example.com">
+                        </div>
+                        <div class="button-group">
+                            <button class="btn-primary" onclick="createUser()">Create</button>
+                            <button class="btn-secondary" onclick="autoCreateUser()">Auto</button>
+                        </div>
+                    </div>
+
+                    <!-- User Selection -->
+                    <div class="section">
+                        <div class="section-title">Active User ID</div>
+                        <input type="text" id="activeUserId" readonly placeholder="User ID appears here">
+                    </div>
+
+                    <!-- PHQ-9 API -->
+                    <div class="section">
+                        <div class="section-title">📋 PHQ-9 Assessment</div>
+                        <div class="form-group">
+                            <label>Responses (0-3, comma separated)</label>
+                            <input type="text" id="phqResponses" value="1,2,1,0,2,1,0,1,2" placeholder="9 values">
+                        </div>
+                        <div class="button-group">
+                            <button class="btn-primary" onclick="submitPHQ()">Submit</button>
+                            <button class="btn-secondary" onclick="getPHQHistory()">History</button>
+                        </div>
+                    </div>
+
+                    <!-- Risk Score API -->
+                    <div class="section">
+                        <div class="section-title">⚠️ Risk Prediction</div>
+                        <div class="form-group">
+                            <label>Features (18 required)</label>
+                            <textarea id="riskFeatures">[0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]</textarea>
+                        </div>
+                        <div class="button-group">
+                            <button class="btn-primary" onclick="predictRiskScore()">Predict</button>
+                            <button class="btn-secondary" onclick="getScores()">Scores</button>
+                        </div>
+                    </div>
+
+                    <!-- Trends API -->
+                    <div class="section">
+                        <div class="section-title">📈 Trends & Analysis</div>
+                        <div class="form-group">
+                            <label>Days</label>
+                            <input type="number" id="trendDays" value="30" min="1" max="365">
+                        </div>
+                        <div class="button-group">
+                            <button class="btn-primary" onclick="getTrends()">Get</button>
+                            <button class="btn-secondary" onclick="getTrendSummary()">Summary</button>
+                        </div>
+                    </div>
+
+                    <!-- Alerts API -->
+                    <div class="section">
+                        <div class="section-title">🔔 Alerts Management</div>
+                        <button class="btn-primary" onclick="getAlerts()" style="width: 100%;">Get Alerts</button>
+                    </div>
+
+                    <!-- Alert Actions -->
+                    <div class="section">
+                        <div class="section-title">⚡ Mark Alert as Read</div>
+                        <div class="form-group">
+                            <label>Alert ID</label>
+                            <input type="text" id="alertId" placeholder="Enter alert ID">
+                        </div>
+                        <div class="button-group">
+                            <button class="btn-primary" onclick="markAlertRead()" style="flex: 2;">Mark Read</button>
+                            <button class="btn-secondary" onclick="markAllAlertsRead()">Mark All</button>
+                        </div>
+                    </div>
+
+                    <!-- User Management -->
+                    <div class="section">
+                        <div class="section-title">👥 User Management</div>
+                        <div class="form-group">
+                            <label>User ID (optional)</label>
+                            <input type="text" id="userId" placeholder="Leave empty for current user">
+                        </div>
+                        <div class="button-group">
+                            <button class="btn-primary" onclick="getAllUsers()" style="flex: 1;">List All</button>
+                            <button class="btn-secondary" onclick="getUserById()">Get User</button>
+                        </div>
+                    </div>
+
+                    <!-- Other APIs -->
+                    <div class="section">
+                        <button class="btn-primary" onclick="checkHealth()" style="width: 100%;">Health Check</button>
+                    </div>
+
+                    <!-- Clear -->
+                    <div class="section">
+                        <button class="btn-secondary" onclick="clearResponses()" style="width: 100%;">Clear Log</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel - Response Display -->
+            <div class="response-panel">
+                <div class="response-panel-header">
+                    📊 API Responses
+                    <span id="response-count" style="font-size: 12px; font-weight: 400;">0 responses</span>
+                </div>
+                <div class="response-content">
+                    <div id="test-summary" class="test-summary"></div>
+                    <div id="responses" class="empty-state">No responses yet. Create a user and try an API call.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:5000/api';
+        const HEALTH_URL = 'http://localhost:5000/health';
+        let responses = [];
+        let testsPassed = 0;
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            checkHealth();
+            loadStoredUser();
+            autoGenerateEmail();
+            setInterval(checkHealth, 5000); // Check health every 5 seconds
+        });
+
+        function autoGenerateEmail() {
+            const emailField = document.getElementById('userEmail');
+            if (!emailField.value) {
+                const timestamp = Date.now();
+                emailField.value = `test_${timestamp}@mindcare.local`;
+            }
+        }
+
+        function checkHealth() {
+            fetch(HEALTH_URL)
+                .then(r => r.json())
+                .then(data => {
+                    setHealthStatus(true, '✓ Online');
+                    addResponse('health', 200, data, 'Backend is running');
+                })
+                .catch(e => {
+                    setHealthStatus(false, '✗ Offline');
+                    addResponse('health', 'ERROR', null, 'Cannot connect to backend on port 5000');
+                });
+        }
+
+        function setHealthStatus(online, text) {
+            const indicator = document.getElementById('health-indicator');
+            const status = document.getElementById('health-status');
+            if (online) {
+                indicator.classList.add('online');
+            } else {
+                indicator.classList.remove('online');
+            }
+            status.textContent = text;
+        }
+
+        function getActiveUserId() {
+            const userId = document.getElementById('activeUserId').value;
+            if (!userId) {
+                alert('⚠️ Please create a user first');
+                return null;
+            }
+            return userId;
+        }
+
+        function storeUser(userId) {
+            localStorage.setItem('mindcare_user_id', userId);
+            document.getElementById('activeUserId').value = userId;
+        }
+
+        function loadStoredUser() {
+            const stored = localStorage.getItem('mindcare_user_id');
+            if (stored) {
+                document.getElementById('activeUserId').value = stored;
+            }
+        }
+
+        function addResponse(endpoint, status, data, description = '') {
+            const isSuccess = status === 200 || status === 201;
+            const isError = status === 'ERROR' || (status >= 400 && status < 600);
+            const statusClass = isError ? 'error' : (isSuccess ? 'success' : 'info');
+
+            const response = {
+                endpoint: endpoint,
+                status: status,
+                data: data,
+                description: description,
+                timestamp: new Date().toLocaleTimeString(),
+                statusClass: statusClass
+            };
+
+            responses.unshift(response);
+            if (responses.length > 30) responses.pop();
+
+            renderResponses();
+
+            if (isSuccess) testsPassed++;
+            document.getElementById('test-count').textContent = testsPassed;
+        }
+
+        function renderResponses() {
+            const container = document.getElementById('responses');
+            if (responses.length === 0) {
+                container.innerHTML = '<div class="empty-state">No responses yet. Create a user and try an API call.</div>';
+                return;
+            }
+
+            container.innerHTML = responses.map((r, i) => `
+                <div class="response-item ${r.statusClass}">
+                    <div class="response-title">
+                        <span class="response-status ${r.statusClass}">${r.status}</span>
+                        <strong>${r.endpoint}</strong>
+                        <div class="response-time">${r.timestamp}</div>
+                    </div>
+                    ${r.description ? `<div style="font-size: 12px; margin-bottom: 6px; color: #666;">${r.description}</div>` : ''}
+                    ${r.data ? `<div class="response-data"><pre>${JSON.stringify(r.data, null, 2)}</pre></div>` : ''}
+                </div>
+            `).join('');
+
+            document.getElementById('response-count').textContent = responses.length + ' responses';
+        }
+
+        async function apiCall(method, endpoint, data = null) {
+            try {
+                const options = {
+                    method,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                };
+
+                if (data) options.body = JSON.stringify(data);
+
+                const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
+                const responseData = await response.json().catch(() => null);
+
+                addResponse(
+                    `${method} ${endpoint}`,
+                    response.status,
+                    responseData,
+                    response.statusText
+                );
+                return { status: response.status, data: responseData };
+            } catch (error) {
+                addResponse(
+                    `${method} ${endpoint}`,
+                    'ERROR',
+                    null,
+                    error.message
+                );
+                return { status: 'ERROR', data: null };
+            }
+        }
+
+        function createUser() {
+            const name = document.getElementById('userName').value.trim();
+            const email = document.getElementById('userEmail').value.trim();
+
+            if (!name) {
+                alert('Please enter a name');
+                return;
+            }
+            if (!email) {
+                alert('Please enter an email');
+                return;
+            }
+
+            apiCall('POST', '/users', { name, email, role: 'patient' }).then(result => {
+                if (result.status === 201 && result.data && result.data.id) {
+                    storeUser(result.data.id);
+                }
+            });
+        }
+
+        function autoCreateUser() {
+            const timestamp = Date.now();
+            document.getElementById('userName').value = `User ${Math.random().toString(36).substring(2, 9)}`;
+            document.getElementById('userEmail').value = `test_${timestamp}@mindcare.local`;
+            createUser();
+        }
+
+        function submitPHQ() {
+            const userId = getActiveUserId();
+            if (!userId) return;
+
+            const responsesStr = document.getElementById('phqResponses').value;
+            const responses = responsesStr.split(',').map(r => parseInt(r.trim()));
+
+            if (responses.length !== 9) {
+                alert('PHQ-9 requires exactly 9 values');
+                return;
+            }
+            if (responses.some(r => isNaN(r) || r < 0 || r > 3)) {
+                alert('Each value must be 0-3');
+                return;
+            }
+
+            apiCall('POST', '/phq', { user_id: userId, responses });
+        }
+
+        function getPHQHistory() {
+            const userId = getActiveUserId();
+            if (!userId) return;
+            apiCall('GET', `/phq/${userId}?limit=10`);
+        }
+
+        function predictRiskScore() {
+            const userId = getActiveUserId();
+            if (!userId) return;
+
+            const featuresStr = document.getElementById('riskFeatures').value.trim();
+            let features;
+            try {
+                features = JSON.parse(featuresStr);
+            } catch (e) {
+                alert('Invalid JSON in features field');
+                return;
+            }
+
+            if (!Array.isArray(features) || features.length !== 18) {
+                alert('Features must be an array of exactly 18 numbers');
+                return;
+            }
+
+            apiCall('POST', '/scores', { user_id: userId, features });
+        }
+
+        function getScores() {
+            const userId = getActiveUserId();
+            if (!userId) return;
+            apiCall('GET', `/scores/${userId}?limit=10`);
+        }
+
+        function getTrends() {
+            const userId = getActiveUserId();
+            if (!userId) return;
+            const days = document.getElementById('trendDays').value;
+            apiCall('GET', `/trends/${userId}?days=${days}`);
+        }
+
+        function getTrendSummary() {
+            const userId = getActiveUserId();
+            if (!userId) return;
+            apiCall('GET', `/trends/${userId}/summary`);
+        }
+
+        function getAlerts() {
+            const userId = getActiveUserId();
+            if (!userId) return;
+            apiCall('GET', `/alerts/${userId}?limit=20`);
+        }
+
+        function markAlertRead() {
+            const alertId = document.getElementById('alertId').value.trim();
+            if (!alertId) {
+                alert('Please enter an alert ID');
+                return;
+            }
+            apiCall('PATCH', `/alerts/${alertId}/read`, {});
+        }
+
+        function markAllAlertsRead() {
+            const userId = getActiveUserId();
+            if (!userId) return;
+            apiCall('PATCH', `/alerts/${userId}/read-all`, {});
+        }
+
+        function getAllUsers() {
+            apiCall('GET', '/users');
+        }
+
+        function getUserById() {
+            let userId = document.getElementById('userId').value.trim();
+            if (!userId) {
+                userId = getActiveUserId();
+            }
+            if (!userId) return;
+            apiCall('GET', `/users/${userId}`);
+        }
+
+        function clearResponses() {
+            responses = [];
+            testsPassed = 0;
+            document.getElementById('test-count').textContent = '0';
+            renderResponses();
+        }
+
+        async function runAllTests() {
+            const btn = document.getElementById('testAllBtn');
+            btn.disabled = true;
+
+            // Ensure we have a user
+            let userId = document.getElementById('activeUserId').value;
+            if (!userId) {
+                btn.innerHTML = '<span class="spinner"></span>Creating user...';
+                autoCreateUser();
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                userId = document.getElementById('activeUserId').value;
+            }
+
+            if (!userId) {
+                alert('Could not create test user');
+                btn.disabled = false;
+                btn.innerHTML = '▶ Run All Tests';
+                return;
+            }
+
+            btn.innerHTML = '<span class="spinner"></span> Testing...';
+            clearResponses();
+
+            const tests = [
+                { name: 'Health Check', fn: () => checkHealth() },
+                { name: 'User Created', fn: () => addResponse('User Setup', 201, { id: userId }, 'Test user ready') },
+                { name: 'Get All Users', fn: () => apiCall('GET', '/users') },
+                { name: 'Get User by ID', fn: () => apiCall('GET', `/users/${userId}`) },
+                { name: 'Model Info', fn: () => apiCall('GET', '/model/info') },
+                { name: 'Submit PHQ-9', fn: () => apiCall('POST', '/phq', { user_id: userId, responses: [1,2,1,0,2,1,0,1,2] }) },
+                { name: 'Get PHQ History', fn: () => apiCall('GET', `/phq/${userId}`) },
+                { name: 'Predict Risk', fn: () => apiCall('POST', '/scores', { user_id: userId, features: [0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5] }) },
+                { name: 'Get Scores', fn: () => apiCall('GET', `/scores/${userId}`) },
+                { name: 'Latest Score', fn: () => apiCall('GET', `/scores/${userId}/latest`) },
+                { name: 'Get Alerts', fn: () => apiCall('GET', `/alerts/${userId}`) },
+                { name: 'Get Trends', fn: () => apiCall('GET', `/trends/${userId}?days=30`) },
+                { name: 'Get Trend Summary', fn: () => apiCall('GET', `/trends/${userId}/summary`) }
+            ];
+
+            for (const test of tests) {
+                await new Promise(resolve => setTimeout(resolve, 300));
+                await test.fn();
+            }
+
+            const summary = document.getElementById('test-summary');
+            summary.style.display = 'block';
+            const passed = testsPassed;
+            const total = tests.length;
+            summary.className = passed >= total - 2 ? 'test-summary' : 'test-summary failed';
+            summary.innerHTML = `✓ <strong>${passed}/${total}</strong> tests completed`;
+
+            btn.disabled = false;
+            btn.innerHTML = '▶ Run All Tests';
+        }
+    </script>
+</body>
+</html>

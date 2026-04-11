@@ -1,34 +1,35 @@
-from app import db
-from sqlalchemy import text
+import sqlite3
+import os
+from flask import g
 
-def init_db():
-    """
-    Run raw SQL migrations if needed.
-    Called manually or during testing setup.
-    """
-    with open("app/db/migrations/init_schema.sql", "r") as f:
-        sql = f.read()
+DB_PATH = os.getenv("SQLITE_PATH", "mindcare.db")
 
-    with db.engine.connect() as conn:
-        for statement in sql.split(";"):
-            stmt = statement.strip()
-            if stmt:
-                conn.execute(text(stmt))
-        conn.commit()
 
 def get_db():
-    """
-    Returns the SQLAlchemy session.
-    Use db.session directly in most cases.
-    """
-    return db.session
+    if "db" not in g:
+        g.db = sqlite3.connect(
+            DB_PATH,
+            detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES,
+        )
+        g.db.row_factory = sqlite3.Row
+        g.db.execute("PRAGMA journal_mode=WAL")
+        g.db.execute("PRAGMA foreign_keys=ON")
+    return g.db
 
-def health_check():
-    """
-    Simple DB connectivity check for /health endpoint.
-    """
-    try:
-        db.session.execute(text("SELECT 1"))
-        return True
-    except Exception:
-        return False
+
+def close_db(e=None):
+    db = g.pop("db", None)
+    if db is not None:
+        db.close()
+
+
+def init_db(app):
+    app.teardown_appcontext(close_db)
+    schema_path = os.path.join(
+        os.path.dirname(__file__), "migrations", "init_schema.sql"
+    )
+    with app.app_context():
+        db = get_db()
+        with open(schema_path, "r") as f:
+            db.executescript(f.read())
+        db.commit()

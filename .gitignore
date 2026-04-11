@@ -6,7 +6,7 @@ venv/
 .env
 *.sqlite3
 *.db
-
+.venv/
 # Node
 node_modules/
 dist/

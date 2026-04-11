@@ -1,216 +1,136 @@
-import { useEffect, useState } from "react";
-import { useNavigate }         from "react-router-dom";
-import { useRiskScores }       from "../hooks/useRiskScores";
-import { useAlerts }           from "../hooks/useAlerts";
-import RiskScoreTimeline       from "../components/RiskScoreTimeline";
-import BehavioralHeatmap       from "../components/BehavioralHeatmap";
-import DepressionAlertFeed     from "../components/DepressionAlertFeed";
-import PHQ9Comparison          from "../components/PHQ9Comparison";
-import SensorActivityLog       from "../components/SensorActivityLog";
-import Navbar                  from "../components/Navbar";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { getTrendSummary } from "../api/apiClient";
+import { useAlerts } from "../hooks/useAlerts";
+import DepressionAlertFeed from "../components/DepressionAlertFeed";
 
-export default function Dashboard() {
-  const navigate = useNavigate();
-  const userId   = localStorage.getItem("user_id");
+// Demo patient roster — replace with real API call in production
+const DEMO_PATIENTS = [
+  { id: "user-001", name: "Aravind Kumar",  age: 28, lastSeen: "Today" },
+  { id: "user-002", name: "Priya Nair",     age: 34, lastSeen: "Yesterday" },
+  { id: "user-003", name: "Rajan Mehta",    age: 22, lastSeen: "2 days ago" },
+  { id: "user-004", name: "Sneha Pillai",   age: 45, lastSeen: "Today" },
+];
+
+const s = {
+  header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 28 },
+  h1: { fontSize: 24, fontWeight: 700 },
+  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 18 },
+  card: {
+    background: "var(--color-surface)",
+    border: "1px solid var(--color-border)",
+    borderRadius: "var(--radius)",
+    padding: "20px 24px",
+    cursor: "pointer",
+    transition: "border-color 0.2s",
+  },
+  name: { fontWeight: 600, fontSize: 16, marginBottom: 4 },
+  meta: { color: "var(--color-muted)", fontSize: 13, marginBottom: 14 },
+  badge: (level) => ({
+    display: "inline-block",
+    padding: "3px 10px",
+    borderRadius: 20,
+    fontSize: 12,
+    fontWeight: 600,
+    background:
+      level === "high"     ? "#3b1a1a" :
+      level === "moderate" ? "#3b2e0a" : "#0f2a1a",
+    color:
+      level === "high"     ? "var(--color-danger)" :
+      level === "moderate" ? "var(--color-warning)" : "var(--color-success)",
+  }),
+  section: { marginTop: 36 },
+  sectionTitle: { fontSize: 18, fontWeight: 600, marginBottom: 16 },
+};
+
+function PatientCard({ patient, onClick }) {
+  const [summary, setSummary] = useState(null);
 
   useEffect(() => {
-    if (!userId) navigate("/login");
-  }, [userId, navigate]);
+    getTrendSummary(patient.id)
+      .then((r) => setSummary(r.data))
+      .catch(() => {});
+  }, [patient.id]);
 
-  const {
-    scores, latestScore, weeklyTrend,
-    phqCorr, featureSummary,
-    loading: scoresLoading,
-    error:   scoresError,
-    refetch: refetchScores,
-    severityColor,
-  } = useRiskScores(userId);
-
-  const {
-    alerts, unreadCount,
-    loading: alertsLoading,
-    handleMarkRead,
-    handleMarkAllRead,
-    severityColor: alertColor,
-  } = useAlerts(userId);
-
-  if (scoresLoading) {
-    return (
-      <div style={styles.center}>
-        <p style={styles.loadingText}>Loading dashboard...</p>
-      </div>
-    );
-  }
-
-  if (scoresError) {
-    return (
-      <div style={styles.center}>
-        <p style={styles.errorText}>{scoresError}</p>
-        <button onClick={refetchScores} style={styles.retryBtn}>Retry</button>
-      </div>
-    );
-  }
+  const level = summary?.latest_score?.risk_level ?? "low";
 
   return (
-    <div style={styles.page}>
-      <Navbar unreadCount={unreadCount} />
+    <div
+      style={s.card}
+      onClick={onClick}
+      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--color-primary)")}
+      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--color-border)")}
+    >
+      <div style={s.name}>{patient.name}</div>
+      <div style={s.meta}>Age {patient.age} · Last active: {patient.lastSeen}</div>
+      <span style={s.badge(level)}>
+        {level.charAt(0).toUpperCase() + level.slice(1)} Risk
+      </span>
+      {summary && (
+        <div style={{ marginTop: 12, fontSize: 13, color: "var(--color-muted)" }}>
+          7-day avg score:{" "}
+          <strong style={{ color: "var(--color-text)" }}>
+            {(summary.week_avg_score * 100).toFixed(1)}%
+          </strong>
+          {" · "}
+          Trend:{" "}
+          <strong style={{ color: "var(--color-text)" }}>
+            {summary.trend_direction?.replace("_", " ")}
+          </strong>
+        </div>
+      )}
+    </div>
+  );
+}
 
-      {/* Summary Cards */}
-      <div style={styles.summaryRow}>
-        <SummaryCard
-          label  = "Latest Risk Score"
-          value  = {latestScore ? `${(latestScore.score * 100).toFixed(0)}%` : "—"}
-          sub    = {latestScore?.severity?.toUpperCase() || "NO DATA"}
-          color  = {severityColor(latestScore?.score)}
-        />
-        <SummaryCard
-          label = "7-Day Trend"
-          value = {featureSummary?.trend || "—"}
-          sub   = {`${featureSummary?.num_windows || 0} windows`}
-          color = "#4c51bf"
-        />
-        <SummaryCard
-          label = "Unread Alerts"
-          value = {unreadCount}
-          sub   = "active notifications"
-          color = {unreadCount > 0 ? "#e53e3e" : "#38a169"}
-        />
-        <SummaryCard
-          label = "Avg Risk (7d)"
-          value = {
-            featureSummary?.avg_risk_score != null
-              ? `${(featureSummary.avg_risk_score * 100).toFixed(0)}%`
-              : "—"
-          }
-          sub   = "rolling average"
-          color = {severityColor(featureSummary?.avg_risk_score)}
-        />
+export default function Dashboard() {
+  const navigate  = useNavigate();
+  const userName  = localStorage.getItem("user_name") || "Clinician";
+  const { alerts, unreadCount, dismissAlert, dismissAll } = useAlerts("user-001");
+
+  return (
+    <div>
+      <div style={s.header}>
+        <div>
+          <h1 style={s.h1}>Welcome, {userName} 👋</h1>
+          <p style={{ color: "var(--color-muted)", marginTop: 4, fontSize: 14 }}>
+            DeepSense-MH · Patient Overview
+          </p>
+        </div>
+        {unreadCount > 0 && (
+          <div style={{
+            background: "var(--color-danger)",
+            color: "#fff",
+            borderRadius: 20,
+            padding: "4px 14px",
+            fontSize: 13,
+            fontWeight: 600,
+          }}>
+            {unreadCount} unread alert{unreadCount > 1 ? "s" : ""}
+          </div>
+        )}
       </div>
 
-      {/* Charts Row */}
-      <div style={styles.chartsRow}>
-        <div style={styles.chartCard}>
-          <h2 style={styles.cardTitle}>Risk Score Timeline</h2>
-          <RiskScoreTimeline scores={scores} weeklyTrend={weeklyTrend} />
-        </div>
-        <div style={styles.chartCard}>
-          <h2 style={styles.cardTitle}>PHQ-9 vs Risk Score</h2>
-          <PHQ9Comparison data={phqCorr} />
-        </div>
-      </div>
-
-      {/* Bottom Row */}
-      <div style={styles.bottomRow}>
-        <div style={{ ...styles.chartCard, flex: 1 }}>
-          <h2 style={styles.cardTitle}>Behavioral Heatmap</h2>
-          <BehavioralHeatmap scores={scores} />
-        </div>
-        <div style={{ ...styles.chartCard, flex: 1 }}>
-          <h2 style={styles.cardTitle}>
-            Alert Feed
-            {unreadCount > 0 && (
-              <span style={styles.badge}>{unreadCount}</span>
-            )}
-          </h2>
-          <DepressionAlertFeed
-            alerts            = {alerts}
-            loading           = {alertsLoading}
-            onMarkRead        = {handleMarkRead}
-            onMarkAllRead     = {handleMarkAllRead}
-            severityColor     = {alertColor}
+      {/* Patient Cards */}
+      <div style={s.grid}>
+        {DEMO_PATIENTS.map((p) => (
+          <PatientCard
+            key={p.id}
+            patient={p}
+            onClick={() => navigate(`/patient/${p.id}`)}
           />
-        </div>
-        <div style={{ ...styles.chartCard, flex: 1 }}>
-          <h2 style={styles.cardTitle}>Sensor Activity Log</h2>
-          <SensorActivityLog scores={scores} />
-        </div>
+        ))}
+      </div>
+
+      {/* Alert Feed */}
+      <div style={s.section}>
+        <div style={s.sectionTitle}>Recent Alerts</div>
+        <DepressionAlertFeed
+          alerts={alerts}
+          onDismiss={dismissAlert}
+          onDismissAll={dismissAll}
+        />
       </div>
     </div>
   );
 }
-
-function SummaryCard({ label, value, sub, color }) {
-  return (
-    <div style={styles.summaryCard}>
-      <p style={styles.summaryLabel}>{label}</p>
-      <p style={{ ...styles.summaryValue, color }}>{value}</p>
-      <p style={styles.summarySub}>{sub}</p>
-    </div>
-  );
-}
-
-const styles = {
-  page: {
-    minHeight:       "100vh",
-    backgroundColor: "#f7fafc",
-    padding:         "0 0 40px",
-  },
-  center: {
-    display:        "flex",
-    flexDirection:  "column",
-    alignItems:     "center",
-    justifyContent: "center",
-    minHeight:      "100vh",
-  },
-  loadingText: { fontSize: "16px", color: "#718096" },
-  errorText:   { fontSize: "16px", color: "#e53e3e" },
-  retryBtn: {
-    marginTop:    "12px",
-    padding:      "8px 20px",
-    background:   "#4c51bf",
-    color:        "#fff",
-    border:       "none",
-    borderRadius: "8px",
-    cursor:       "pointer",
-  },
-  summaryRow: {
-    display:       "grid",
-    gridTemplateColumns: "repeat(4, 1fr)",
-    gap:           "16px",
-    padding:       "24px 32px 0",
-  },
-  summaryCard: {
-    background:   "#ffffff",
-    borderRadius: "12px",
-    padding:      "20px",
-    boxShadow:    "0 1px 8px rgba(0,0,0,0.06)",
-  },
-  summaryLabel: { fontSize: "13px", color: "#718096", margin: "0 0 6px" },
-  summaryValue: { fontSize: "28px", fontWeight: "700", margin: "0 0 4px" },
-  summarySub:   { fontSize: "12px", color: "#a0aec0", margin: 0 },
-  chartsRow: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap:     "16px",
-    padding: "16px 32px 0",
-  },
-  bottomRow: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr 1fr",
-    gap:     "16px",
-    padding: "16px 32px 0",
-  },
-  chartCard: {
-    background:   "#ffffff",
-    borderRadius: "12px",
-    padding:      "20px",
-    boxShadow:    "0 1px 8px rgba(0,0,0,0.06)",
-  },
-  cardTitle: {
-    fontSize:     "15px",
-    fontWeight:   "600",
-    color:        "#2d3748",
-    margin:       "0 0 16px",
-    display:      "flex",
-    alignItems:   "center",
-    gap:          "8px",
-  },
-  badge: {
-    backgroundColor: "#e53e3e",
-    color:           "#fff",
-    borderRadius:    "12px",
-    padding:         "2px 8px",
-    fontSize:        "12px",
-    fontWeight:      "600",
-  },
-};

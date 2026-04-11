@@ -1,121 +1,129 @@
-import pytest
 import json
-from app import create_app, db
-from app.models.user import User
+import pytest  # type: ignore
+from app import create_app
+from app.db.database import get_db
+
 
 @pytest.fixture
 def app():
     app = create_app()
     app.config.update({
-        "TESTING":                 True,
-        "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
-        "JWT_SECRET_KEY":          "test-secret"
+        "TESTING": True,
+        "SQLITE_PATH": ":memory:",
     })
-
-    with app.app_context():
-        db.create_all()
-        # Seed a test user
-        user = User(
-            id    = "test-user-001",
-            name  = "Test Patient",
-            email = "test@example.com",
-            role  = "patient"
-        )
-        db.session.add(user)
-        db.session.commit()
-
     yield app
-
-    with app.app_context():
-        db.drop_all()
 
 
 @pytest.fixture
 def client(app):
     return app.test_client()
 
-
-@pytest.fixture
-def auth_header(client):
-    from flask_jwt_extended import create_access_token
+@pytest.fixture(autouse=True)
+def clean_db(client):
     with client.application.app_context():
-        token = create_access_token(identity="test-user-001")
-    return {"Authorization": f"Bearer {token}"}
+        db = get_db()
+        db.execute("DELETE FROM users")
+        db.commit()
+        
+        
+@pytest.fixture
+def sample_user(client):
+    """Insert a user directly into DB and return their id."""
+    with client.application.app_context():
+        from app.models.user import User
+        user = User.create(name="Test Patient", email="test@mindcare.ai", role="patient")
+        return user.id
 
 
-# --- Score Routes ---
+# ── Health ────────────────────────────────────────────────────
 
-def test_submit_score(client, auth_header):
-    payload = {
-        "user_id":      "test-user-001",
-        "score":        0.72,
-        "window_start": "2024-06-01T08:00:00",
-        "window_end":   "2024-06-01T20:00:00"
-    }
-    res = client.post(
-        "/api/scores/",
-        data    = json.dumps(payload),
-        content_type = "application/json",
-        headers = auth_header
-    )
-    assert res.status_code == 201
-    data = res.get_json()
-    assert data["score"]    == 0.72
-    assert data["severity"] == "high"
-
-
-def test_submit_score_invalid(client, auth_header):
-    payload = {"user_id": "test-user-001", "score": 1.5}
-    res = client.post(
-        "/api/scores/",
-        data         = json.dumps(payload),
-        content_type = "application/json",
-        headers      = auth_header
-    )
-    assert res.status_code == 400
-
-
-def test_get_scores_empty(client, auth_header):
-    res = client.get("/api/scores/test-user-001", headers=auth_header)
+def test_health(client):
+    res = client.get("/health")
     assert res.status_code == 200
-    assert res.get_json() == []
+    assert res.get_json()["status"] == "ok"
 
 
-# --- PHQ Routes ---
+# ── Scores ────────────────────────────────────────────────────
 
-def test_submit_phq(client, auth_header):
-    payload = {"user_id": "test-user-001", "score": 14}
-    res = client.post(
-        "/api/phq/",
-        data         = json.dumps(payload),
-        content_type = "application/json",
-        headers      = auth_header
-    )
+def test_post_score_success(client, sample_user):
+    res = client.post("/api/scores", json={
+        "user_id": sample_user,
+        "score": 0.75,
+        "features": {"step_count": 1200, "sleep_hours": 5.2}
+    })
     assert res.status_code == 201
     data = res.get_json()
+    assert data["risk_level"] == "high"
+    assert data["score"] == 0.75
+
+
+def test_post_score_missing_fields(client):
+    res = client.post("/api/scores", json={"score": 0.5})
+    assert res.status_code == 422
+
+
+def test_post_score_invalid_range(client, sample_user):
+    res = client.post("/api/scores", json={"user_id": sample_user, "score": 1.5})
+    assert res.status_code == 422
+
+
+def test_get_scores(client, sample_user):
+    # Post two scores first
+    for s in [0.2, 0.6]:
+        client.post("/api/scores", json={"user_id": sample_user, "score": s})
+    res = client.get(f"/api/scores/{sample_user}")
+    assert res.status_code == 200
+    assert len(res.get_json()) == 2
+
+
+def test_get_latest_score(client, sample_user):
+    client.post("/api/scores", json={"user_id": sample_user, "score": 0.4})
+    client.post("/api/scores", json={"user_id": sample_user, "score": 0.8})
+    res = client.get(f"/api/scores/{sample_user}/latest")
+    assert res.status_code == 200
+    assert res.get_json()["score"] == 0.8
+
+
+# ── PHQ ───────────────────────────────────────────────────────
+
+def test_post_phq_success(client, sample_user):
+    res = client.post("/api/phq", json={
+        "user_id": sample_user,
+        "responses": [2, 1, 3, 2, 1, 0, 2, 1, 1]
+    })
+    assert res.status_code == 201
+    data = res.get_json()
+    assert data["score"] == 13
     assert data["severity"] == "moderate"
 
 
-def test_submit_phq_out_of_range(client, auth_header):
-    payload = {"user_id": "test-user-001", "score": 30}
-    res = client.post(
-        "/api/phq/",
-        data         = json.dumps(payload),
-        content_type = "application/json",
-        headers      = auth_header
-    )
-    assert res.status_code == 400
+def test_post_phq_wrong_count(client, sample_user):
+    res = client.post("/api/phq", json={
+        "user_id": sample_user,
+        "responses": [1, 2, 3]
+    })
+    assert res.status_code == 422
 
 
-# --- Alert Routes ---
+def test_post_phq_invalid_values(client, sample_user):
+    res = client.post("/api/phq", json={
+        "user_id": sample_user,
+        "responses": [0, 1, 2, 3, 4, 0, 1, 2, 3]   # 4 is invalid
+    })
+    assert res.status_code == 422
 
-def test_get_alerts_empty(client, auth_header):
-    res = client.get("/api/alerts/test-user-001", headers=auth_header)
+
+# ── Alerts ────────────────────────────────────────────────────
+
+def test_get_alerts_empty(client, sample_user):
+    res = client.get(f"/api/alerts/{sample_user}")
     assert res.status_code == 200
     assert res.get_json() == []
 
 
-def test_unread_count_zero(client, auth_header):
-    res = client.get("/api/alerts/test-user-001/count", headers=auth_header)
-    assert res.status_code == 200
-    assert res.get_json()["unread_count"] == 0
+def test_alerts_generated_on_high_score(client, sample_user):
+    client.post("/api/scores", json={"user_id": sample_user, "score": 0.9})
+    res = client.get(f"/api/alerts/{sample_user}")
+    alerts = res.get_json()
+    assert len(alerts) >= 1
+    assert alerts[0]["severity"] == "critical"

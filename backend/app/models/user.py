@@ -1,29 +1,55 @@
 import uuid
 from datetime import datetime
-from app import db
+from ..db.database import get_db
 
-class User(db.Model):
-    __tablename__ = "users"
 
-    id         = db.Column(db.String,   primary_key=True, default=lambda: str(uuid.uuid4()))
-    name       = db.Column(db.String,   nullable=False)
-    email      = db.Column(db.String,   unique=True, nullable=False)
-    role       = db.Column(db.String,   nullable=False, default="patient")  # patient | clinician
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    # Relationships
-    risk_scores = db.relationship("RiskScore", backref="user", lazy=True)
-    phq_entries = db.relationship("PhqEntry",  backref="user", lazy=True)
-    alerts      = db.relationship("Alert",     backref="user", lazy=True)
+class User:
+    def __init__(self, id, name, email, role, created_at):
+        self.id = id
+        self.name = name
+        self.email = email
+        self.role = role
+        self.created_at = created_at
 
     def to_dict(self):
         return {
-            "id":         self.id,
-            "name":       self.name,
-            "email":      self.email,
-            "role":       self.role,
-            "created_at": self.created_at.isoformat()
+            "id": self.id,
+            "name": self.name,
+            "email": self.email,
+            "role": self.role,
+            "created_at": self.created_at,
         }
 
-    def __repr__(self):
-        return f"<User {self.email} ({self.role})>"
+    @staticmethod
+    def create(name, email, role="patient", user_id=None):
+        db = get_db()
+        if user_id is None:
+            user_id = str(uuid.uuid4())
+        db.execute(
+            "INSERT INTO users (id, name, email, role) VALUES (?, ?, ?, ?)",
+            (user_id, name, email, role),
+        )
+        db.commit()
+        return User.get_by_id(user_id)
+
+    @staticmethod
+    def get_by_id(user_id):
+        db = get_db()
+        row = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        if row is None:
+            return None
+        return User(**dict(row))
+
+    @staticmethod
+    def get_by_email(email):
+        db = get_db()
+        row = db.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+        if row is None:
+            return None
+        return User(**dict(row))
+
+    @staticmethod
+    def get_all():
+        db = get_db()
+        rows = db.execute("SELECT * FROM users ORDER BY created_at DESC").fetchall()
+        return [User(**dict(r)) for r in rows]

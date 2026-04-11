@@ -1,61 +1,59 @@
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required
-from app import db
-from app.models.alert import Alert
+from ..models.user import User
+from ..db.database import get_db
 
 alerts_bp = Blueprint("alerts", __name__)
 
-@alerts_bp.route("/<user_id>", methods=["GET"])
-@jwt_required()
+
+@alerts_bp.route("/alerts/<user_id>", methods=["GET"])
 def get_alerts(user_id):
-    """
-    GET /api/alerts/<user_id>?unread_only=true
-    Returns alerts for a user, optionally filtered to unread only.
-    """
-    unread_only = request.args.get("unread_only", "false").lower() == "true"
+    """Return alert feed for a user."""
+    if User.get_by_id(user_id) is None:
+        return jsonify({"error": "User not found"}), 404
 
-    query = Alert.query.filter_by(user_id=user_id)
+    limit = request.args.get("limit", 20, type=int)
+    unread_only = request.args.get("unread", "false").lower() == "true"
+
+    db = get_db()
+    query = "SELECT * FROM alerts WHERE user_id = ?"
+    params = [user_id]
+
     if unread_only:
-        query = query.filter_by(is_read=False)
+        query += " AND is_read = 0"
 
-    alerts = query.order_by(Alert.created_at.desc()).all()
-    return jsonify([a.to_dict() for a in alerts]), 200
+    query += " ORDER BY created_at DESC LIMIT ?"
+    params.append(limit)
+
+    rows = db.execute(query, params).fetchall()
+    alerts = [dict(r) for r in rows]
+    return jsonify(alerts), 200
 
 
-@alerts_bp.route("/<alert_id>/read", methods=["PATCH"])
-@jwt_required()
+@alerts_bp.route("/alerts/<alert_id>/read", methods=["PATCH"])
 def mark_read(alert_id):
-    """
-    PATCH /api/alerts/<alert_id>/read
-    Marks a single alert as read.
-    """
-    alert = Alert.query.get(alert_id)
-    if not alert:
+    """Mark a single alert as read."""
+    db = get_db()
+    result = db.execute(
+        "UPDATE alerts SET is_read = 1 WHERE id = ?", (alert_id,)
+    )
+    db.commit()
+
+    if result.rowcount == 0:
         return jsonify({"error": "Alert not found"}), 404
 
-    alert.is_read = True
-    db.session.commit()
-    return jsonify(alert.to_dict()), 200
+    return jsonify({"success": True, "alert_id": alert_id}), 200
 
 
-@alerts_bp.route("/<user_id>/read-all", methods=["PATCH"])
-@jwt_required()
+@alerts_bp.route("/alerts/<user_id>/read-all", methods=["PATCH"])
 def mark_all_read(user_id):
-    """
-    PATCH /api/alerts/<user_id>/read-all
-    Marks all alerts for a user as read.
-    """
-    Alert.query.filter_by(user_id=user_id, is_read=False).update({"is_read": True})
-    db.session.commit()
-    return jsonify({"message": "All alerts marked as read"}), 200
+    """Mark all alerts for a user as read."""
+    if User.get_by_id(user_id) is None:
+        return jsonify({"error": "User not found"}), 404
 
-
-@alerts_bp.route("/<user_id>/count", methods=["GET"])
-@jwt_required()
-def unread_count(user_id):
-    """
-    GET /api/alerts/<user_id>/count
-    Returns count of unread alerts.
-    """
-    count = Alert.query.filter_by(user_id=user_id, is_read=False).count()
-    return jsonify({"unread_count": count}), 200
+    db = get_db()
+    db.execute(
+        "UPDATE alerts SET is_read = 1 WHERE user_id = ? AND is_read = 0",
+        (user_id,),
+    )
+    db.commit()
+    return jsonify({"success": True}), 200

@@ -1,31 +1,31 @@
 from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
-from flask_jwt_extended import JWTManager
 from flask_cors import CORS
-from .config import Config
+from .config import get_config
+from .db.database import init_db
+from .routes.scores import scores_bp
+from .routes.phq import phq_bp
+from .routes.trends import trends_bp
+from .routes.alerts import alerts_bp
+from .routes.users import users_bp
 
-db = SQLAlchemy()
-jwt = JWTManager()
 
 def create_app():
     app = Flask(__name__)
-    app.config.from_object(Config)
+    cfg = get_config()
+    app.config.from_object(cfg)
 
-    db.init_app(app)
-    jwt.init_app(app)
-    CORS(app)
+    CORS(app, origins=cfg.CORS_ORIGINS)
 
-    from .routes.scores import scores_bp
-    from .routes.phq import phq_bp
-    from .routes.trends import trends_bp
-    from .routes.alerts import alerts_bp
+    init_db(app)
 
-    app.register_blueprint(scores_bp, url_prefix="/api/scores")
-    app.register_blueprint(phq_bp,    url_prefix="/api/phq")
-    app.register_blueprint(trends_bp, url_prefix="/api/trends")
-    app.register_blueprint(alerts_bp, url_prefix="/api/alerts")
+    app.register_blueprint(users_bp, url_prefix="/api")
+    app.register_blueprint(scores_bp, url_prefix="/api")
+    app.register_blueprint(phq_bp, url_prefix="/api")
+    app.register_blueprint(trends_bp, url_prefix="/api")
+    app.register_blueprint(alerts_bp, url_prefix="/api")
 
-    with app.app_context():
-        db.create_all()
+    @app.route("/health")
+    def health():
+        return {"status": "ok", "service": "DeepSense-MH Backend"}, 200
 
     return app

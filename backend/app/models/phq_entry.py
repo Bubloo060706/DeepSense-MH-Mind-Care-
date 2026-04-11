@@ -1,44 +1,64 @@
 import uuid
-from datetime import datetime
-from app import db
+import json
+from ..db.database import get_db
 
-PHQ_SEVERITY_MAP = {
-    (0,  4):  "minimal",
-    (5,  9):  "mild",
-    (10, 14): "moderate",
-    (15, 19): "moderately severe",
-    (20, 27): "severe"
-}
 
-def get_severity(score: int) -> str:
-    for (low, high), label in PHQ_SEVERITY_MAP.items():
-        if low <= score <= high:
-            return label
-    return "unknown"
-
-class PhqEntry(db.Model):
-    __tablename__ = "phq_entries"
-
-    id           = db.Column(db.String,   primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id      = db.Column(db.String,   db.ForeignKey("users.id"), nullable=False)
-    score        = db.Column(db.Integer,  nullable=False)
-    severity     = db.Column(db.String,   nullable=False)
-    submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    def __init__(self, user_id, score):
-        self.id       = str(uuid.uuid4())
-        self.user_id  = user_id
-        self.score    = score
-        self.severity = get_severity(score)
+class PHQEntry:
+    def __init__(self, id, user_id, score, responses, submitted_at):
+        self.id = id
+        self.user_id = user_id
+        self.score = score
+        self.responses = json.loads(responses) if isinstance(responses, str) else (responses or [])
+        self.submitted_at = submitted_at
 
     def to_dict(self):
         return {
-            "id":           self.id,
-            "user_id":      self.user_id,
-            "score":        self.score,
-            "severity":     self.severity,
-            "submitted_at": self.submitted_at.isoformat()
+            "id": self.id,
+            "user_id": self.user_id,
+            "score": self.score,
+            "responses": self.responses,
+            "severity": self.get_severity(),
+            "submitted_at": self.submitted_at,
         }
 
-    def __repr__(self):
-        return f"<PhqEntry user={self.user_id} score={self.score} ({self.severity})>"
+    def get_severity(self):
+        if self.score <= 4:
+            return "minimal"
+        elif self.score <= 9:
+            return "mild"
+        elif self.score <= 14:
+            return "moderate"
+        elif self.score <= 19:
+            return "moderately_severe"
+        else:
+            return "severe"
+
+    @staticmethod
+    def create(user_id, score, responses=None):
+        db = get_db()
+        entry_id = str(uuid.uuid4())
+        responses_json = json.dumps(responses or [])
+        db.execute(
+            """INSERT INTO phq_entries (id, user_id, score, responses)
+               VALUES (?, ?, ?, ?)""",
+            (entry_id, user_id, score, responses_json),
+        )
+        db.commit()
+        return PHQEntry.get_by_id(entry_id)
+
+    @staticmethod
+    def get_by_id(entry_id):
+        db = get_db()
+        row = db.execute("SELECT * FROM phq_entries WHERE id = ?", (entry_id,)).fetchone()
+        if row is None:
+            return None
+        return PHQEntry(**dict(row))
+
+    @staticmethod
+    def get_by_user(user_id, limit=20):
+        db = get_db()
+        rows = db.execute(
+            "SELECT * FROM phq_entries WHERE user_id = ? ORDER BY submitted_at DESC LIMIT ?",
+            (user_id, limit),
+        ).fetchall()
+        return [PHQEntry(**dict(r)) for r in rows]

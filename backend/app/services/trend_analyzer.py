@@ -1,116 +1,92 @@
-from datetime import datetime, timedelta
-from app.models.risk_score import RiskScore
-from app.models.phq_entry import PhqEntry
-from app.services.score_aggregator import get_daily_average
-
-def get_weekly_trend(user_id: str, weeks: int = 8) -> list[dict]:
-    """
-    Returns weekly average risk scores over the last N weeks.
-    Each entry contains the week start date and average score.
-    """
-    results = []
-    now     = datetime.utcnow()
-
-    for i in range(weeks - 1, -1, -1):
-        week_start = now - timedelta(weeks=i+1)
-        week_end   = now - timedelta(weeks=i)
-
-        scores = (
-            RiskScore.query
-            .filter(
-                RiskScore.user_id     == user_id,
-                RiskScore.window_end >= week_start,
-                RiskScore.window_end <  week_end
-            )
-            .all()
-        )
-
-        avg = round(sum(s.score for s in scores) / len(scores), 4) if scores else None
-
-        results.append({
-            "week_start": week_start.strftime("%Y-%m-%d"),
-            "week_end":   week_end.strftime("%Y-%m-%d"),
-            "avg_score":  avg,
-            "sample_count": len(scores)
-        })
-
-    return results
+from .score_aggregator import ScoreAggregator
+from ..db.database import get_db
 
 
-def get_phq_risk_correlation(user_id: str) -> list[dict]:
-    """
-    Returns aligned risk score and PHQ-9 entries over time.
-    For each PHQ-9 entry, fetches the 7-day average risk score
-    centered around the submission date.
-    """
-    phq_entries = (
-        PhqEntry.query
-        .filter_by(user_id=user_id)
-        .order_by(PhqEntry.submitted_at.asc())
-        .all()
-    )
+class TrendAnalyzer:
+    """Derive longitudinal trend insights from aggregated scores."""
 
-    results = []
-    for entry in phq_entries:
-        window_start = entry.submitted_at - timedelta(days=3)
-        window_end   = entry.submitted_at + timedelta(days=3)
+    def __init__(self, user_id):
+        self.user_id = user_id
+        self.aggregator = ScoreAggregator(user_id)
 
-        nearby_scores = (
-            RiskScore.query
-            .filter(
-                RiskScore.user_id     == user_id,
-                RiskScore.window_end >= window_start,
-                RiskScore.window_end <= window_end
-            )
-            .all()
-        )
+    def analyze(self, days=30):
+        daily = self.aggregator.daily_averages(days=days)
+        distribution = self.aggregator.risk_level_distribution(days=days)
+        overall_avg = self.aggregator.overall_average(days=days)
+        phq_history = self._phq_history()
 
-        avg_risk = (
-            round(sum(s.score for s in nearby_scores) / len(nearby_scores), 4)
-            if nearby_scores else None
-        )
+        if len(daily) >= 2:
+            trend_direction = self._compute_trend(daily)
+        else:
+            raw_scores = self.aggregator.latest_n_scores(n=30)
+            # ensure oldest → newest order
+            raw_scores = list(reversed(raw_scores))
 
-        results.append({
-            "date":          entry.submitted_at.strftime("%Y-%m-%d"),
-            "phq_score":     entry.score,
-            "phq_severity":  entry.severity,
-            "avg_risk_score": avg_risk
-        })
+            fallback = [
+                {"avg_score": s["score"] if isinstance(s, dict) else s.score}
+                for s in raw_scores
+            ]
+            trend_direction = self._compute_trend(fallback)
 
-    return results
+        return {
+            "user_id": self.user_id,
+            "days_analyzed": days,
+            "overall_avg_score": overall_avg,
+            "trend_direction": trend_direction,
+            "daily_averages": daily,
+            "risk_level_distribution": distribution,
+            "phq_history": phq_history,
+        }
 
+    def summary(self):
+        overall_avg = self.aggregator.overall_average(days=7)
+        distribution = self.aggregator.risk_level_distribution(days=7)
+        latest = self.aggregator.latest_n_scores(n=1)
+        daily = self.aggregator.daily_averages(days=7)
+        trend_direction = self._compute_trend(daily)
 
-def get_feature_summary(user_id: str) -> dict:
-    """
-    Returns a summary of behavioral feature trends for the last 7 days.
-    Placeholder structure — in production, features would be stored
-    per-window alongside each risk score.
-    """
-    scores = (
-        RiskScore.query
-        .filter_by(user_id=user_id)
-        .order_by(RiskScore.window_end.desc())
-        .limit(7)
-        .all()
-    )
+        return {
+            "user_id": self.user_id,
+            "week_avg_score": overall_avg,
+            "trend_direction": trend_direction,
+            "latest_score": latest[0] if latest else None,
+            "risk_distribution_7d": distribution,
+        }
 
-    return {
-        "user_id":        user_id,
-        "period":         "last_7_days",
-        "num_windows":    len(scores),
-        "avg_risk_score": round(sum(s.score for s in scores) / len(scores), 4) if scores else None,
-        "latest_severity": scores[0].severity_label() if scores else "unknown",
-        "trend":          _compute_trend([s.score for s in reversed(scores)])
-    }
+    def _phq_history(self):
+        db = get_db()
+        rows = db.execute(
+            """
+            SELECT score, submitted_at
+            FROM phq_entries
+            WHERE user_id = ?
+            ORDER BY submitted_at ASC
+            LIMIT 10
+            """,
+            (self.user_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
 
+    def _compute_trend(self, daily_averages):
+        """Simple linear trend: compare first half avg vs second half avg."""
+        if len(daily_averages) < 2:
+            return "insufficient_data"
 
-def _compute_trend(scores: list[float]) -> str:
-    if len(scores) < 2:
-        return "insufficient_data"
-    slope = (scores[-1] - scores[0]) / len(scores)
-    if slope > 0.03:
-        return "worsening"
-    elif slope < -0.03:
-        return "improving"
-    else:
-        return "stable"
+        scores = [d["avg_score"] for d in daily_averages]
+        mid = len(scores) // 2
+        first_half_list = scores[:mid]
+        second_half_list = scores[mid:]
+
+        if not first_half_list or not second_half_list:
+            return "insufficient_data"
+
+        first_half = sum(first_half_list) / len(first_half_list)
+        second_half = sum(second_half_list) / len(second_half_list)
+
+        diff = second_half - first_half
+        if diff > 0.05:
+            return "worsening"
+        elif diff < -0.05:
+            return "improving"
+        else:
+            return "stable"

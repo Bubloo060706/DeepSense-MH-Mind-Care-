@@ -1,54 +1,48 @@
-import React    from "react";
+import React from "react";
 import ReactDOM from "react-dom/client";
-import App      from "./App";
+import App from "./App";
 
-// Global reset
-const globalStyles = `
-  *, *::before, *::after {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
+// Global styles
+const style = document.createElement("style");
+style.textContent = `
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --color-bg:        #0f1117;
+    --color-surface:   #1a1d27;
+    --color-border:    #2a2d3e;
+    --color-primary:   #6c63ff;
+    --color-success:   #22c55e;
+    --color-warning:   #f59e0b;
+    --color-danger:    #ef4444;
+    --color-text:      #e2e8f0;
+    --color-muted:     #94a3b8;
+    --radius:          10px;
+    --shadow:          0 4px 24px rgba(0,0,0,0.35);
   }
 
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
-                 Roboto, Oxygen, Ubuntu, sans-serif;
-    background-color: #f7fafc;
-    color: #2d3748;
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+    background: var(--color-bg);
+    color: var(--color-text);
+    min-height: 100vh;
     -webkit-font-smoothing: antialiased;
   }
 
+  a { color: var(--color-primary); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
   button {
+    cursor: pointer;
+    border: none;
     font-family: inherit;
   }
 
-  input {
-    font-family: inherit;
-  }
-
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-
-  ::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 3px;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    background: #cbd5e0;
-    border-radius: 3px;
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    background: #a0aec0;
-  }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--color-bg); }
+  ::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
 `;
-
-const styleTag = document.createElement("style");
-styleTag.innerHTML = globalStyles;
-document.head.appendChild(styleTag);
+document.head.appendChild(style);
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>

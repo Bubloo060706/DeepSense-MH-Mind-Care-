@@ -1,18 +1,17 @@
 import axios from "axios";
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
-
-const apiClient = axios.create({
-  baseURL: BASE_URL,
+const api = axios.create({
+  baseURL: "/api",
+  timeout: 10000,
   headers: {
     "Content-Type": "application/json",
   },
 });
 
-// Attach JWT token to every request
-apiClient.interceptors.request.use(
+// ── Request interceptor ───────────────────────────────────────
+api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("access_token");
+    const token = localStorage.getItem("auth_token");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -21,63 +20,50 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Handle 401 globally — redirect to login
-apiClient.interceptors.response.use(
+// ── Response interceptor ──────────────────────────────────────
+api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem("access_token");
+      localStorage.removeItem("auth_token");
       window.location.href = "/login";
     }
     return Promise.reject(error);
   }
 );
 
-// --- Auth ---
-export const login = (email, password) =>
-  apiClient.post("/auth/login", { email, password });
+// ── Scores ────────────────────────────────────────────────────
+export const postScore = (userId, score, features = {}) =>
+  api.post("/scores", { user_id: userId, score, features });
 
-// --- Scores ---
-export const getRiskScores = (userId, limit = 30) =>
-  apiClient.get(`/scores/${userId}?limit=${limit}`);
+export const getScores = (userId, limit = 30) =>
+  api.get(`/scores/${userId}`, { params: { limit } });
 
 export const getLatestScore = (userId) =>
-  apiClient.get(`/scores/latest/${userId}`);
+  api.get(`/scores/${userId}/latest`);
 
-export const submitScore = (payload) =>
-  apiClient.post("/scores/", payload);
+// ── PHQ-9 ─────────────────────────────────────────────────────
+export const submitPHQ = (userId, responses) =>
+  api.post("/phq", { user_id: userId, responses });
 
-// --- PHQ-9 ---
-export const getPhqHistory = (userId, limit = 10) =>
-  apiClient.get(`/phq/${userId}?limit=${limit}`);
+export const getPHQHistory = (userId, limit = 20) =>
+  api.get(`/phq/${userId}`, { params: { limit } });
 
-export const getLatestPhq = (userId) =>
-  apiClient.get(`/phq/latest/${userId}`);
+// ── Trends ────────────────────────────────────────────────────
+export const getTrends = (userId, days = 30) =>
+  api.get(`/trends/${userId}`, { params: { days } });
 
-export const submitPhq = (userId, score) =>
-  apiClient.post("/phq/", { user_id: userId, score });
+export const getTrendSummary = (userId) =>
+  api.get(`/trends/${userId}/summary`);
 
-// --- Trends ---
-export const getWeeklyTrend = (userId, weeks = 8) =>
-  apiClient.get(`/trends/${userId}/weekly?weeks=${weeks}`);
-
-export const getPhqCorrelation = (userId) =>
-  apiClient.get(`/trends/${userId}/phq-correlation`);
-
-export const getFeatureSummary = (userId) =>
-  apiClient.get(`/trends/${userId}/feature-summary`);
-
-// --- Alerts ---
-export const getAlerts = (userId, unreadOnly = false) =>
-  apiClient.get(`/alerts/${userId}?unread_only=${unreadOnly}`);
-
-export const getUnreadCount = (userId) =>
-  apiClient.get(`/alerts/${userId}/count`);
+// ── Alerts ────────────────────────────────────────────────────
+export const getAlerts = (userId, { limit = 20, unread = false } = {}) =>
+  api.get(`/alerts/${userId}`, { params: { limit, unread } });
 
 export const markAlertRead = (alertId) =>
-  apiClient.patch(`/alerts/${alertId}/read`);
+  api.patch(`/alerts/${alertId}/read`);
 
 export const markAllAlertsRead = (userId) =>
-  apiClient.patch(`/alerts/${userId}/read-all`);
+  api.patch(`/alerts/${userId}/read-all`);
 
-export default apiClient;
+export default api;

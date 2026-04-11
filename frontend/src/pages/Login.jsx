@@ -1,181 +1,137 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { login } from "../api/apiClient";
+import logo from '../assets/MindCare_Logo.png'
+
+const s = {
+  page: {
+    minHeight: "100vh",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "var(--color-bg)",
+  },
+  card: {
+    background: "var(--color-surface)",
+    border: "1px solid var(--color-border)",
+    borderRadius: "var(--radius)",
+    padding: "40px",
+    width: "100%",
+    maxWidth: 420,
+    boxShadow: "var(--shadow)",
+  },
+  logo: {
+    textAlign: "center",
+    marginBottom: 32,
+  },
+  title: { fontSize: 26, fontWeight: 700, color: "var(--color-text)" },
+  subtitle: { fontSize: 14, color: "var(--color-muted)", marginTop: 4 },
+  label: { fontSize: 13, color: "var(--color-muted)", marginBottom: 6, display: "block" },
+  input: {
+    width: "100%",
+    padding: "10px 14px",
+    background: "var(--color-bg)",
+    border: "1px solid var(--color-border)",
+    borderRadius: 8,
+    color: "var(--color-text)",
+    fontSize: 14,
+    outline: "none",
+    marginBottom: 18,
+  },
+  btn: {
+    width: "100%",
+    padding: "12px",
+    background: "var(--color-primary)",
+    color: "#fff",
+    borderRadius: 8,
+    fontSize: 15,
+    fontWeight: 600,
+    marginTop: 4,
+  },
+  error: {
+    background: "#3b1a1a",
+    border: "1px solid var(--color-danger)",
+    color: "var(--color-danger)",
+    borderRadius: 8,
+    padding: "10px 14px",
+    fontSize: 13,
+    marginBottom: 16,
+  },
+  hint: { fontSize: 12, color: "var(--color-muted)", textAlign: "center", marginTop: 20 },
+};
+
+// Demo credentials — replace with real auth in production
+const DEMO_USERS = [
+  { email: "clinician@mindcare.ai", password: "demo1234", token: "demo-token-clinician", name: "Dr. Meena" },
+];
 
 export default function Login() {
-  const navigate    = useNavigate();
-  const [form,      setForm]      = useState({ email: "", password: "" });
-  const [error,     setError]     = useState(null);
-  const [loading,   setLoading]   = useState(false);
+  const [email, setEmail]       = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError]       = useState("");
+  const [loading, setLoading]   = useState(false);
+  const navigate = useNavigate();
 
-  const handleChange = (e) => {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-  };
-
-  const handleSubmit = async (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
+    setError("");
     setLoading(true);
-    setError(null);
 
-    try {
-      const res = await login(form.email, form.password);
-      localStorage.setItem("access_token", res.data.access_token);
-      localStorage.setItem("user_id",      res.data.user_id);
-      localStorage.setItem("user_role",    res.data.role);
-      navigate("/dashboard");
-    } catch (err) {
-      setError(err.response?.data?.error || "Invalid email or password");
-    } finally {
-      setLoading(false);
+    await new Promise((r) => setTimeout(r, 600)); // simulate network
+
+    const match = DEMO_USERS.find(
+      (u) => u.email === email.trim() && u.password === password
+    );
+
+    if (match) {
+      localStorage.setItem("auth_token", match.token);
+      localStorage.setItem("user_name", match.name);
+      navigate("/");
+    } else {
+      setError("Invalid email or password. Try clinician@mindcare.ai / demo1234");
     }
+    setLoading(false);
   };
 
   return (
-    <div style={styles.wrapper}>
-      <div style={styles.card}>
-
-        {/* Header */}
-        <div style={styles.header}>
-          <div style={styles.iconWrap}>🧠</div>
-          <h1 style={styles.title}>Depression Detection</h1>
-          <p style={styles.subtitle}>Clinician & Patient Portal</p>
+    <div style={s.page}>
+      <div style={s.card}>
+        <div style={s.logo}>
+          <div style={{ fontSize: 36, marginBottom: 8 }}><img style={{width:100}} src={logo} alt="logo"/></div>
+          <div style={s.title}>MindCare</div>
+          <div style={s.subtitle}>DeepSense-MH Clinician Dashboard</div>
         </div>
 
-        {/* Error */}
-        {error && (
-          <div style={styles.errorBanner}>
-            {error}
-          </div>
-        )}
+        {error && <div style={s.error}>{error}</div>}
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} style={styles.form}>
-          <div style={styles.fieldGroup}>
-            <label style={styles.label}>Email</label>
-            <input
-              type        = "email"
-              name        = "email"
-              value       = {form.email}
-              onChange    = {handleChange}
-              placeholder = "you@example.com"
-              required
-              style={styles.input}
-            />
-          </div>
+        <form onSubmit={handleLogin}>
+          <label style={s.label}>Email</label>
+          <input
+            style={s.input}
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="clinician@mindcare.ai"
+            required
+            autoFocus
+          />
 
-          <div style={styles.fieldGroup}>
-            <label style={styles.label}>Password</label>
-            <input
-              type        = "password"
-              name        = "password"
-              value       = {form.password}
-              onChange    = {handleChange}
-              placeholder = "••••••••"
-              required
-              style={styles.input}
-            />
-          </div>
+          <label style={s.label}>Password</label>
+          <input
+            style={s.input}
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            required
+          />
 
-          <button
-            type    = "submit"
-            disabled = {loading}
-            style   = {{ ...styles.button, opacity: loading ? 0.7 : 1 }}
-          >
-            {loading ? "Signing in..." : "Sign In"}
+          <button style={s.btn} type="submit" disabled={loading}>
+            {loading ? "Signing in…" : "Sign In"}
           </button>
         </form>
 
-        <p style={styles.footer}>
-          IoT Mental Health Monitoring System · v1.0
-        </p>
+        <p style={s.hint}>DeepSense-MH · ICAN 2026 Demo Build</p>
       </div>
     </div>
   );
 }
-
-const styles = {
-  wrapper: {
-    minHeight:       "100vh",
-    display:         "flex",
-    alignItems:      "center",
-    justifyContent:  "center",
-    backgroundColor: "#f7fafc",
-  },
-  card: {
-    background:   "#ffffff",
-    borderRadius: "16px",
-    padding:      "40px 36px",
-    width:        "100%",
-    maxWidth:     "420px",
-    boxShadow:    "0 4px 24px rgba(0,0,0,0.08)",
-  },
-  header: {
-    textAlign:    "center",
-    marginBottom: "28px",
-  },
-  iconWrap: {
-    fontSize:     "40px",
-    marginBottom: "8px",
-  },
-  title: {
-    fontSize:   "22px",
-    fontWeight: "600",
-    color:      "#1a202c",
-    margin:     "0 0 4px",
-  },
-  subtitle: {
-    fontSize: "14px",
-    color:    "#718096",
-    margin:   0,
-  },
-  errorBanner: {
-    background:   "#fff5f5",
-    border:       "1px solid #fc8181",
-    borderRadius: "8px",
-    color:        "#c53030",
-    padding:      "10px 14px",
-    fontSize:     "14px",
-    marginBottom: "20px",
-  },
-  form: {
-    display:       "flex",
-    flexDirection: "column",
-    gap:           "18px",
-  },
-  fieldGroup: {
-    display:       "flex",
-    flexDirection: "column",
-    gap:           "6px",
-  },
-  label: {
-    fontSize:   "13px",
-    fontWeight: "500",
-    color:      "#4a5568",
-  },
-  input: {
-    padding:      "10px 14px",
-    borderRadius: "8px",
-    border:       "1px solid #e2e8f0",
-    fontSize:     "15px",
-    outline:      "none",
-    color:        "#2d3748",
-  },
-  button: {
-    padding:         "12px",
-    borderRadius:    "8px",
-    backgroundColor: "#4c51bf",
-    color:           "#ffffff",
-    fontSize:        "15px",
-    fontWeight:      "600",
-    border:          "none",
-    cursor:          "pointer",
-    marginTop:       "4px",
-  },
-  footer: {
-    textAlign:  "center",
-    fontSize:   "12px",
-    color:      "#a0aec0",
-    marginTop:  "28px",
-    marginBottom: 0,
-  },
-};

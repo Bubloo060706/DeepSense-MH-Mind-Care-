@@ -1,164 +1,136 @@
 import { useMemo } from "react";
+import { format, parseISO, startOfWeek, addDays, differenceInCalendarDays } from "date-fns";
 
-const HOURS  = Array.from({ length: 24 }, (_, i) => `${i}:00`);
-const DAYS   = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAYS  = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
+
+function riskToColor(score) {
+  if (score === null) return "#1a1d27";
+  if (score >= 0.7)   return "#7f1d1d";
+  if (score >= 0.5)   return "#78350f";
+  if (score >= 0.3)   return "#14532d";
+  return "#0f2a1a";
+}
+
+function riskToBorder(score) {
+  if (score === null) return "transparent";
+  if (score >= 0.7)   return "#ef4444";
+  if (score >= 0.5)   return "#f59e0b";
+  if (score >= 0.3)   return "#22c55e";
+  return "#16a34a";
+}
+
+const s = {
+  wrapper: { overflowX: "auto" },
+  table: { borderCollapse: "collapse", width: "100%", minWidth: 520 },
+  thDay: {
+    color: "var(--color-muted)",
+    fontSize: 11,
+    fontWeight: 600,
+    textAlign: "left",
+    paddingBottom: 8,
+    width: 36,
+  },
+  thHour: {
+    color: "var(--color-muted)",
+    fontSize: 10,
+    textAlign: "center",
+    paddingBottom: 8,
+    minWidth: 18,
+  },
+  cell: (score) => ({
+    width: 18,
+    height: 18,
+    background: riskToColor(score),
+    border: `1px solid ${riskToBorder(score)}`,
+    borderRadius: 3,
+    cursor: score !== null ? "pointer" : "default",
+    position: "relative",
+  }),
+  legend: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 14,
+    fontSize: 11,
+    color: "var(--color-muted)",
+  },
+  legendDot: (color) => ({
+    width: 12, height: 12, borderRadius: 2,
+    background: color, display: "inline-block",
+  }),
+};
 
 export default function BehavioralHeatmap({ scores = [] }) {
-
-  // Build a 7×24 grid of average risk scores
-  const grid = useMemo(() => {
-    const matrix = Array.from({ length: 7 }, () => Array(24).fill(null));
-    const counts = Array.from({ length: 7 }, () => Array(24).fill(0));
-
-    scores.forEach((s) => {
-      const d    = new Date(s.window_end);
-      const day  = (d.getDay() + 6) % 7;  // Mon=0 … Sun=6
-      const hour = d.getHours();
-
-      if (matrix[day][hour] === null) matrix[day][hour] = 0;
-      matrix[day][hour] += s.score;
-      counts[day][hour] += 1;
+  // Build a map: "dayOfWeek-hour" → avg score
+  const heatmap = useMemo(() => {
+    const buckets = {};
+    scores.forEach(({ score, recorded_at }) => {
+      try {
+        const dt  = parseISO(recorded_at);
+        const dow = dt.getDay();
+        const hr  = dt.getHours();
+        const key = `${dow}-${hr}`;
+        if (!buckets[key]) buckets[key] = { sum: 0, count: 0 };
+        buckets[key].sum   += score;
+        buckets[key].count += 1;
+      } catch { /* skip malformed */ }
     });
-
-    return matrix.map((row, di) =>
-      row.map((val, hi) =>
-        counts[di][hi] > 0 ? val / counts[di][hi] : null
-      )
-    );
+    const result = {};
+    Object.entries(buckets).forEach(([k, v]) => {
+      result[k] = v.sum / v.count;
+    });
+    return result;
   }, [scores]);
-
-  const cellColor = (val) => {
-    if (val === null) return "#f7fafc";
-    if (val >= 0.65)  return "#fc8181";  // high
-    if (val >= 0.30)  return "#f6ad55";  // moderate
-    return "#68d391";                     // low
-  };
-
-  const cellOpacity = (val) => {
-    if (val === null) return 0.2;
-    return 0.4 + val * 0.6;
-  };
 
   if (!scores.length) {
     return (
-      <div style={styles.empty}>
-        <p style={styles.emptyText}>No data for heatmap</p>
+      <div style={{ color: "var(--color-muted)", textAlign: "center", padding: 32 }}>
+        No behavioural data available.
       </div>
     );
   }
 
   return (
-    <div style={styles.wrapper}>
-      {/* Hour labels */}
-      <div style={styles.headerRow}>
-        <div style={styles.dayLabelSpacer} />
-        {HOURS.filter((_, i) => i % 4 === 0).map((h) => (
-          <div key={h} style={styles.hourLabel}>{h}</div>
-        ))}
-      </div>
-
-      {/* Grid rows */}
-      {DAYS.map((day, di) => (
-        <div key={day} style={styles.row}>
-          <div style={styles.dayLabel}>{day}</div>
-          <div style={styles.cellRow}>
-            {grid[di].map((val, hi) => (
-              <div
-                key     = {hi}
-                title   = {val != null ? `${day} ${HOURS[hi]} — Risk: ${(val * 100).toFixed(0)}%` : "No data"}
-                style   = {{
-                  ...styles.cell,
-                  backgroundColor: cellColor(val),
-                  opacity:         cellOpacity(val),
-                }}
-              />
+    <div style={s.wrapper}>
+      <table style={s.table}>
+        <thead>
+          <tr>
+            <th style={s.thDay} />
+            {HOURS.map((h) => (
+              <th key={h} style={s.thHour}>
+                {h % 6 === 0 ? `${h}h` : ""}
+              </th>
             ))}
-          </div>
-        </div>
-      ))}
+          </tr>
+        </thead>
+        <tbody>
+          {DAYS.map((day, dow) => (
+            <tr key={day}>
+              <td style={{ ...s.thDay, paddingBottom: 0, paddingTop: 2 }}>{day}</td>
+              {HOURS.map((hr) => {
+                const score = heatmap[`${dow}-${hr}`] ?? null;
+                return (
+                  <td key={hr}>
+                    <div
+                      style={s.cell(score)}
+                      title={score !== null ? `${day} ${hr}:00 — Risk: ${(score * 100).toFixed(1)}%` : "No data"}
+                    />
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
 
-      {/* Legend */}
-      <div style={styles.legend}>
-        {[
-          { color: "#68d391", label: "Low (<30%)"  },
-          { color: "#f6ad55", label: "Mod (30–65%)" },
-          { color: "#fc8181", label: "High (>65%)"  },
-          { color: "#f7fafc", label: "No data"      },
-        ].map((l) => (
-          <div key={l.label} style={styles.legendItem}>
-            <div style={{ ...styles.legendDot, backgroundColor: l.color }} />
-            <span style={styles.legendText}>{l.label}</span>
-          </div>
-        ))}
+      <div style={s.legend}>
+        <span><span style={s.legendDot("#0f2a1a")} /> Low</span>
+        <span><span style={s.legendDot("#14532d")} /> Moderate-low</span>
+        <span><span style={s.legendDot("#78350f")} /> Moderate-high</span>
+        <span><span style={s.legendDot("#7f1d1d")} /> High</span>
+        <span><span style={s.legendDot("#1a1d27")} /> No data</span>
       </div>
     </div>
   );
 }
-
-const styles = {
-  wrapper:  { overflowX: "auto" },
-  headerRow: {
-    display:    "flex",
-    alignItems: "center",
-    marginBottom: "2px",
-  },
-  dayLabelSpacer: { width: "36px", flexShrink: 0 },
-  hourLabel: {
-    flex:      1,
-    fontSize:  "10px",
-    color:     "#a0aec0",
-    textAlign: "center",
-  },
-  row: {
-    display:    "flex",
-    alignItems: "center",
-    marginBottom: "2px",
-  },
-  dayLabel: {
-    width:      "36px",
-    flexShrink: 0,
-    fontSize:   "11px",
-    color:      "#718096",
-    fontWeight: "500",
-  },
-  cellRow: {
-    display: "flex",
-    flex:    1,
-    gap:     "1px",
-  },
-  cell: {
-    flex:         1,
-    height:       "20px",
-    borderRadius: "2px",
-    cursor:       "default",
-    transition:   "opacity 0.15s",
-    minWidth:     "8px",
-  },
-  legend: {
-    display:   "flex",
-    gap:       "16px",
-    marginTop: "12px",
-    flexWrap:  "wrap",
-  },
-  legendItem: {
-    display:    "flex",
-    alignItems: "center",
-    gap:        "5px",
-  },
-  legendDot: {
-    width:        "10px",
-    height:       "10px",
-    borderRadius: "2px",
-  },
-  legendText: {
-    fontSize: "11px",
-    color:    "#718096",
-  },
-  empty: {
-    display:        "flex",
-    alignItems:     "center",
-    justifyContent: "center",
-    height:         "120px",
-  },
-  emptyText: { fontSize: "14px", color: "#a0aec0" },
-};

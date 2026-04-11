@@ -1,23 +1,32 @@
 import os
-from datetime import timedelta
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class Config:
-    # General
-    SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key")
-    DEBUG = os.getenv("FLASK_ENV", "development") == "development"
+    SECRET_KEY = os.getenv("SECRET_KEY", "deepsense-mh-secret-key")
+    DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///mindcare.db")
+    DEBUG = os.getenv("DEBUG", "false").lower() == "true"
+    CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
 
-    # Database
-    SQLALCHEMY_DATABASE_URI = os.getenv(
-        "DATABASE_URL", "sqlite:///depression_detection.db"
-    )
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    RISK_LOW_THRESHOLD = float(os.getenv("RISK_LOW_THRESHOLD", "0.3"))
+    RISK_HIGH_THRESHOLD = float(os.getenv("RISK_HIGH_THRESHOLD", "0.7"))
+    ALERT_COOLDOWN_HOURS = int(os.getenv("ALERT_COOLDOWN_HOURS", "24"))
 
-    # JWT
-    JWT_SECRET_KEY = os.getenv("JWT_SECRET", "dev-jwt-secret")
-    JWT_ACCESS_TOKEN_EXPIRES = timedelta(
-        hours=int(os.getenv("JWT_EXPIRY_HOURS", 24))
-    )
 
-    # App-specific
-    RISK_ALERT_THRESHOLD = 0.65      # risk score above this triggers alert
-    PHQ_SYNC_INTERVAL_DAYS = 7       # how often PHQ-9 is expected
+class DevelopmentConfig(Config):
+    DEBUG = True
+
+
+class ProductionConfig(Config):
+    DEBUG = False
+
+
+config_map = {
+    "development": DevelopmentConfig,
+    "production": ProductionConfig,
+}
+
+def get_config():
+    env = os.getenv("FLASK_ENV", "development")
+    return config_map.get(env, DevelopmentConfig)

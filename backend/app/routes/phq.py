@@ -1,69 +1,44 @@
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required
-from app import db
-from app.models.phq_entry import PhqEntry
+from ..models.phq_entry import PHQEntry
+from ..models.user import User
 
 phq_bp = Blueprint("phq", __name__)
 
-@phq_bp.route("/", methods=["POST"])
-@jwt_required()
+
+@phq_bp.route("/phq", methods=["POST"])
 def submit_phq():
-    """
-    POST /api/phq/
-    Body: { user_id, score }
-    Weekly PHQ-9 submission from the app or clinician portal.
-    """
-    data = request.get_json()
+    """Submit a PHQ-9 assessment result."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Invalid JSON body"}), 400
 
-    if "user_id" not in data or "score" not in data:
-        return jsonify({"error": "user_id and score are required"}), 400
+    user_id = data.get("user_id")
+    responses = data.get("responses", [])
 
-    if not (0 <= int(data["score"]) <= 27):
-        return jsonify({"error": "PHQ-9 score must be between 0 and 27"}), 400
+    if not user_id or not responses:
+        return jsonify({"error": "user_id and responses are required"}), 422
 
-    entry = PhqEntry(
-        user_id = data["user_id"],
-        score   = int(data["score"])
-    )
+    if len(responses) != 9:
+        return jsonify({"error": "PHQ-9 requires exactly 9 responses"}), 422
 
-    db.session.add(entry)
-    db.session.commit()
+    if any(r not in [0, 1, 2, 3] for r in responses):
+        return jsonify({"error": "Each response must be 0, 1, 2, or 3"}), 422
+
+    if User.get_by_id(user_id) is None:
+        return jsonify({"error": "User not found"}), 404
+
+    total_score = sum(responses)
+    entry = PHQEntry.create(user_id, total_score, responses)
 
     return jsonify(entry.to_dict()), 201
 
 
-@phq_bp.route("/<user_id>", methods=["GET"])
-@jwt_required()
-def get_phq_history(user_id):
-    """
-    GET /api/phq/<user_id>?limit=10
-    Returns PHQ-9 history for a user.
-    """
-    limit   = request.args.get("limit", 10, type=int)
-    entries = (
-        PhqEntry.query
-        .filter_by(user_id=user_id)
-        .order_by(PhqEntry.submitted_at.desc())
-        .limit(limit)
-        .all()
-    )
+@phq_bp.route("/phq/<user_id>", methods=["GET"])
+def get_phq(user_id):
+    """Return PHQ-9 history for a user."""
+    if User.get_by_id(user_id) is None:
+        return jsonify({"error": "User not found"}), 404
+
+    limit = request.args.get("limit", 20, type=int)
+    entries = PHQEntry.get_by_user(user_id, limit=limit)
     return jsonify([e.to_dict() for e in entries]), 200
-
-
-@phq_bp.route("/latest/<user_id>", methods=["GET"])
-@jwt_required()
-def get_latest_phq(user_id):
-    """
-    GET /api/phq/latest/<user_id>
-    Returns the most recent PHQ-9 entry.
-    """
-    entry = (
-        PhqEntry.query
-        .filter_by(user_id=user_id)
-        .order_by(PhqEntry.submitted_at.desc())
-        .first()
-    )
-    if not entry:
-        return jsonify({"error": "No PHQ-9 entries found"}), 404
-
-    return jsonify(entry.to_dict()), 200
